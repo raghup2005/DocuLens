@@ -10,7 +10,8 @@ DocuLens is a multimodal Retrieval-Augmented Generation (RAG) application. Norma
 
 - **Multimodal ingestion**: reads text and images from your documents
 - **Image understanding**: a vision-capable Gemini model turns each image or chart into a searchable text description
-- **Semantic search**: finds the pieces closest in meaning to your question, not just keyword matches
+- **Hybrid search**: combines keyword search with vector (semantic) search, so both exact terms and meaning are matched
+- **Reranking**: a reranker re-scores the retrieved results and keeps only the most relevant ones for the answer
 - **Grounded answers**: the model answers only from retrieved content and says "I don't know" when the answer isn't there
 - **Source display**: every answer shows which documents (and images) it came from
 - **Simple web UI**: chat interface built with Gradio
@@ -27,7 +28,7 @@ DocuLens is a multimodal Retrieval-Augmented Generation (RAG) application. Norma
                  └────────────────────────────────────────────────────────────────────────┘
 
                  ┌───────────────────────── QUERY (every question) ───────────────────────┐
- User question ─►│ Embed question → Top-k similarity search in ChromaDB                   │
+ User question ─►│ Hybrid search (keyword + vector) → Rerank → keep best top-k            │
                  │ Retrieved text + image info → Prompt → Gemini → Answer + sources       │
                  └────────────────────────────────────────────────────────────────────────┘
 ```
@@ -40,9 +41,10 @@ DocuLens is a multimodal Retrieval-Augmented Generation (RAG) application. Norma
 4. **Describe images**: each image is sent to Gemini, which writes a text description of it (including charts, labels and trends).
 5. **Embed**: every text chunk and image description is converted into an embedding, a list of numbers that captures meaning.
 6. **Store**: embeddings go into ChromaDB along with metadata (source file, type, page or image path).
-7. **Retrieve**: your question is embedded with the *same* embedding model, and the closest pieces are returned.
-8. **Generate**: the retrieved context is placed in a prompt, and Gemini writes an answer using only that context.
-9. **Show**: the answer appears in the Gradio app with its sources.
+7. **Retrieve (hybrid)**: your question is embedded with the *same* embedding model for vector search, and run through keyword search at the same time. The results from both are merged.
+8. **Rerank**: a reranker re-scores the merged candidates against your question and keeps only the best ones.
+9. **Generate**: the retrieved context is placed in a prompt, and Gemini writes an answer using only that context.
+10. **Show**: the answer appears in the Gradio app with its sources.
 
 ---
 
@@ -144,6 +146,8 @@ Open the local link Gradio prints in the terminal (usually `http://127.0.0.1:786
 
 - **Image descriptions instead of raw image embeddings.** Converting images to text lets the project reuse a standard text-based RAG stack and makes retrieval easy to debug. The tradeoff is that a description can miss fine visual detail.
 - **Same embedding model for documents and questions.** Different models create different vector spaces, so mixing them would make similarity scores meaningless.
+- **Hybrid search.** Vector search is good at meaning but can miss exact terms like names, codes or numbers. Keyword search catches those. Combining both improves recall.
+- **Reranking.** The first retrieval step is fast but rough. A reranker looks more carefully at the shortlisted results and puts the most relevant ones first, so the LLM gets cleaner context. The tradeoff is a little extra latency per query.
 - **Strict prompting.** The model is told to answer only from the retrieved context, which reduces hallucination.
 - **Metadata on every chunk.** Source file, content type and location are stored so answers can be cited and checked.
 - **Gradio over Streamlit.** Streamlit rendered a blank page in the development environment, so the UI was switched to Gradio, which worked reliably.
@@ -155,14 +159,12 @@ Open the local link Gradio prints in the terminal (usually `http://127.0.0.1:786
 - Image quality depends on the vision model's description; small text or dense charts may lose detail.
 - Complex or nested tables may not be parsed perfectly.
 - Free API tiers have rate limits, so large ingestion runs can be slow.
-- No reranking or hybrid (keyword + vector) search yet.
+- Reranking adds a small amount of latency to each query.
 
 ---
 
 ## Future Improvements
 
-- Hybrid search (keyword + vector) for exact-term matches
-- A reranker to improve precision of the top results
 - Layout-aware parsing for tables and multi-column pages
 - Page-level image retrieval (ColPali-style) for visually rich documents
 - Conversation memory for follow-up questions
